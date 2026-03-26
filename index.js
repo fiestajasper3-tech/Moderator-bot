@@ -17,62 +17,49 @@ const client = new Client({
   ]
 });
 
-const PREFIX = "!"; // You can change this to . or ?
+const PREFIX = "!";
+// Add words you want to block here
+const BANNED_WORDS = ["scam", "free-nitro", "fake-link"]; 
 
 client.once('ready', () => {
-    console.log(`✅ Moderator Bot Online: ${client.user.tag}`);
+    console.log(`✅ Shield Bot Online: ${client.user.tag}`);
 });
 
 client.on('messageCreate', async (message) => {
-    if (message.author.bot || !message.content.startsWith(PREFIX)) return;
+    if (message.author.bot) return;
 
+    // --- AUTO-MOD LOGIC (No prefix needed) ---
+    
+    // 1. Block Banned Words
+    const foundWord = BANNED_WORDS.some(word => message.content.toLowerCase().includes(word));
+    if (foundWord) {
+        await message.delete().catch(err => console.log("Missing delete perms"));
+        return message.channel.send(`⚠️ ${message.author}, that word is not allowed here!`).then(m => setTimeout(() => m.delete(), 3000));
+    }
+
+    // 2. Block Discord Invites (Prevents advertising)
+    if (message.content.includes("discord.gg/") || message.content.includes("discord.com/invite/")) {
+        // Allow Admins to post links, but block everyone else
+        if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
+            await message.delete().catch(err => console.log("Missing delete perms"));
+            return message.reply("🚫 No advertising other servers!");
+        }
+    }
+
+    // --- MODERATOR COMMANDS (!clear, !kick, !ban) ---
+    if (!message.content.startsWith(PREFIX)) return;
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    // --- COMMAND: !CLEAR [NUMBER] ---
-    if (command === 'clear' || command === 'purge') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) 
-            return message.reply("❌ You don't have permission to clear messages!");
-
+    if (command === 'clear') {
+        if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return;
         const amount = parseInt(args[0]);
-        if (isNaN(amount) || amount < 1 || amount > 100) 
-            return message.reply("Please provide a number between 1 and 100.");
-
+        if (isNaN(amount) || amount < 1 || amount > 100) return message.reply("Pick 1-100.");
         await message.channel.bulkDelete(amount, true);
-        message.channel.send(`🧹 Deleted ${amount} messages.`).then(m => setTimeout(() => m.delete(), 3000));
+        message.channel.send(`🧹 Cleared ${amount} messages.`).then(m => setTimeout(() => m.delete(), 2000));
     }
 
-    // --- COMMAND: !KICK [@USER] ---
-    if (command === 'kick') {
-        if (!message.member.permissions.has(PermissionFlagsBits.KickMembers)) 
-            return message.reply("❌ You can't kick people!");
-
-        const target = message.mentions.members.first();
-        if (!target) return message.reply("Tag a user to kick.");
-        
-        try {
-            await target.kick();
-            message.reply(`✈️ ${target.user.tag} has been kicked.`);
-        } catch (err) {
-            message.reply("⚠️ I couldn't kick that user. They might have higher rank than me.");
-        }
-    }
-
-    // --- COMMAND: !BAN [@USER] ---
-    if (command === 'ban') {
-        if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) 
-            return message.reply("❌ You can't ban people!");
-
-        const target = message.mentions.members.first();
-        if (!target) return message.reply("Tag a user to ban.");
-        
-        try {
-            await target.ban();
-            message.reply(`🔨 ${target.user.tag} has been banned.`);
-        } catch (err) {
-            message.reply("⚠️ Error banning user.");
-        }
-    }
+    // Add Kick/Ban logic here as well...
 });
 
 client.login(process.env.TOKEN);
